@@ -1,0 +1,192 @@
+<!DOCTYPE html>
+<html lang="fa" dir="rtl">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>مدیریت کدهای تخفیف</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+</head>
+<body>
+
+<div class="app">
+    <header class="header">
+        <div class="header-inner">
+            <h1 class="header-title">مدیریت کدهای تخفیف</h1>
+            <button class="btn-icon" onclick="shutdown()" title="بستن برنامه">&times;</button>
+        </div>
+    </header>
+
+    <main class="main">
+        <section class="stats" id="stats-section">
+            <div class="stat-card stat-total">
+                <span class="stat-number" id="stat-total">0</span>
+                <span class="stat-label">مجموع کدهای تخفیف</span>
+            </div>
+            <div class="stat-card stat-active">
+                <span class="stat-number" id="stat-active">0</span>
+                <span class="stat-label">فعال</span>
+            </div>
+            <div class="stat-card stat-used">
+                <span class="stat-number" id="stat-used">0</span>
+                <span class="stat-label">استفاده شده</span>
+            </div>
+            <div class="stat-card stat-expired">
+                <span class="stat-number" id="stat-expired">0</span>
+                <span class="stat-label">منقضي شده</span>
+            </div>
+        </section>
+
+        <section class="actions-bar">
+            <button class="btn btn-primary" onclick="showModal('single')">+ ایجاد کد تخفیف تکی</button>
+            <button class="btn btn-primary-outline" onclick="showModal('bulk')">+ ایجاد گروهی کد تخفیف</button>
+
+        </section>
+
+        <section class="filter-bar">
+            <input type="text" id="username-filter" class="filter-input" placeholder="جستجوي نام كاربري ..." oninput="filterByUsername()">
+            <button class="btn btn-sm btn-outline" onclick="clearFilter()">پاك كردن</button>
+            <span class="filter-info" id="filter-info"></span>
+        </section>
+
+        <section class="table-section">
+            <div class="table-wrapper">
+                <table class="coupon-table" id="coupon-table">
+                    <thead>
+                        <tr>
+                            <th>رديف</th>
+                            <th>کد تخفیف</th>
+                            <th>نام كاربري</th>
+                            <th>نوع تخفيف</th>
+                            <th>مقدار</th>
+                            <th>تاريخ انقضا</th>
+                            <th>تعداد / باقي‌مانده</th>
+                            <th>وضعيت</th>
+                            <th>عمليات</th>
+                        </tr>
+                    </thead>
+                    <tbody id="coupon-table-body"></tbody>
+                </table>
+            </div>
+            <div class="empty-state" id="empty-state">
+                <p>هنوز کد تخفیفی ایجاد نشده است</p>
+                <p class="empty-hint">بر روی دکمه "ایجاد کد تخفیف" کلیک کنید</p>
+            </div>
+            <div class="loading-state" id="loading-state">
+                <p>در حال بارگذاري...</p>
+            </div>
+        </section>
+    </main>
+</div>
+
+<!-- Single Create Modal -->
+<div class="modal-overlay" id="modal-single" onclick="handleOverlayClick(event, 'single')">
+    <div class="modal" onclick="event.stopPropagation()">
+        <div class="modal-header">
+            <h2>ایجاد کد تخفیف تکی</h2>
+            <button class="btn-icon" onclick="hideModal('single')">&times;</button>
+        </div>
+        <form id="form-single" onsubmit="createCoupon(event)">
+            <div class="form-group">
+                <label for="s-prefix">پيش‌فرض كد</label>
+                <input type="text" id="s-prefix" name="prefix" value="تخفيف">
+            </div>
+            <div class="form-group">
+                <label for="s-username">نام كاربري</label>
+                <input type="text" id="s-username" name="username" required placeholder="مثال: ali123">
+            </div>
+            <div class="form-group">
+                <label>نوع تخفيف</label>
+                <div class="radio-group">
+                    <label class="radio-label">
+                        <input type="radio" name="discount_type" value="percentage" checked>
+                        <span>درصدي</span>
+                    </label>
+                    <label class="radio-label">
+                        <input type="radio" name="discount_type" value="fixed">
+                        <span>مبلغ ثابت</span>
+                    </label>
+                </div>
+            </div>
+            <div class="form-group">
+                <label for="s-value">مقدار تخفيف</label>
+                <input type="number" id="s-value" name="discount_value" min="0.01" step="any" required placeholder="مثال: ۲۰">
+            </div>
+            <div class="form-group">
+                <label for="s-quantity">تعداد مجاز استفاده</label>
+                <input type="number" id="s-quantity" name="quantity" min="1" step="1" value="1" required>
+            </div>
+            <div class="form-group">
+                <label>تاريخ انقضا (شمسی)</label>
+                <div class="jalali-picker" id="jalali-picker-single">
+                    <select id="s-jalali-year" class="jalali-select" onchange="updateJalaliDays('s')"></select>
+                    <select id="s-jalali-month" class="jalali-select" onchange="updateJalaliDays('s')"></select>
+                    <select id="s-jalali-day" class="jalali-select"></select>
+                </div>
+            </div>
+            <div class="form-actions">
+                <button type="submit" class="btn btn-primary" id="submit-btn-single">تولید کد تخفیف</button>
+                <button type="button" class="btn btn-secondary" onclick="hideModal('single')">انصراف</button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<!-- Bulk Create Modal -->
+<div class="modal-overlay" id="modal-bulk" onclick="handleOverlayClick(event, 'bulk')">
+    <div class="modal modal-wide" onclick="event.stopPropagation()">
+        <div class="modal-header">
+            <h2>ایجاد گروهی کد تخفیف</h2>
+            <button class="btn-icon" onclick="hideModal('bulk')">&times;</button>
+        </div>
+        <form id="form-bulk" onsubmit="createCouponsBulk(event)">
+            <div class="form-group">
+                <label for="b-prefix">پيش‌فرض كد</label>
+                <input type="text" id="b-prefix" name="prefix" value="تخفيف">
+            </div>
+            <div class="form-group">
+                <label for="b-usernames">نام كاربري‌ها (هر خط يك نام)</label>
+                <textarea id="b-usernames" name="usernames" class="form-textarea" rows="6" required placeholder="ali&#10;mohammad&#10;reza"></textarea>
+            </div>
+            <div class="form-group">
+                <label>نوع تخفيف</label>
+                <div class="radio-group">
+                    <label class="radio-label">
+                        <input type="radio" name="discount_type" value="percentage" checked>
+                        <span>درصدي</span>
+                    </label>
+                    <label class="radio-label">
+                        <input type="radio" name="discount_type" value="fixed">
+                        <span>مبلغ ثابت</span>
+                    </label>
+                </div>
+            </div>
+            <div class="form-group">
+                <label for="b-value">مقدار تخفيف</label>
+                <input type="number" id="b-value" name="discount_value" min="0.01" step="any" required placeholder="مثال: ۲۰">
+            </div>
+            <div class="form-group">
+                <label for="b-quantity">تعداد مجاز استفاده (برای هر کد تخفیف)</label>
+                <input type="number" id="b-quantity" name="quantity" min="1" step="1" value="1" required>
+            </div>
+            <div class="form-group">
+                <label>تاريخ انقضا (شمسی)</label>
+                <div class="jalali-picker" id="jalali-picker-bulk">
+                    <select id="b-jalali-year" class="jalali-select" onchange="updateJalaliDays('b')"></select>
+                    <select id="b-jalali-month" class="jalali-select" onchange="updateJalaliDays('b')"></select>
+                    <select id="b-jalali-day" class="jalali-select"></select>
+                </div>
+            </div>
+            <div class="form-actions">
+                <button type="submit" class="btn btn-primary" id="submit-btn-bulk">تولید گروهی کد تخفیف</button>
+                <button type="button" class="btn btn-secondary" onclick="hideModal('bulk')">انصراف</button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<div class="toast-container" id="toast-container"></div>
+
+<script src="{{ url_for('static', filename='js/jalaali.min.js') }}"></script>
+<script src="{{ url_for('static', filename='js/script.js') }}"></script>
+</body>
+</html>
