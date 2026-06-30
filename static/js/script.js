@@ -176,7 +176,7 @@ function handleOverlayClick(event, type) {
 }
 
 // ---- Filter ----
-function filterByUsername() {
+function filterBySearch() {
     clearTimeout(filterTimeout);
     filterTimeout = setTimeout(function () {
         loadCoupons();
@@ -184,7 +184,7 @@ function filterByUsername() {
 }
 
 function clearFilter() {
-    document.getElementById('username-filter').value = '';
+    document.getElementById('search-filter').value = '';
     document.getElementById('filter-info').textContent = '';
     loadCoupons();
 }
@@ -209,13 +209,13 @@ async function loadCoupons() {
     document.getElementById('empty-state').style.display = 'none';
 
     try {
-        const filter = document.getElementById('username-filter').value.trim();
-        const url = filter ? '/api/coupons?username=' + encodeURIComponent(filter) : '/api/coupons';
+        const q = document.getElementById('search-filter').value.trim();
+        const url = q ? '/api/coupons?q=' + encodeURIComponent(q) : '/api/coupons';
         coupons = await apiGet(url);
         renderCoupons(coupons);
         const info = document.getElementById('filter-info');
-        if (filter) {
-            info.textContent = coupons.length + ' نتیجه برای "' + filter + '"';
+        if (q) {
+            info.textContent = coupons.length + ' نتیجه برای "' + q + '"';
         } else {
             info.textContent = '';
         }
@@ -247,13 +247,16 @@ function renderCoupons(coupons) {
             : c.discount_value.toLocaleString() + ' تومان';
         const typeLabel = c.discount_type === 'percentage' ? 'درصدی' : 'مبلغ ثابت';
         const qtyText = c.quantity + ' / ' + Math.max(0, c.quantity - c.used_count);
-        const username = c.username || '-';
+        const username = c.username || '';
+        const usernameHtml = username
+            ? '<span class="username-cell">' + escapeHtml(username) + '</span>'
+            : '<span class="badge badge-global">عمومی</span>';
         const actions = getActionButtons(c, status);
         return [
             '<tr>',
             '<td>' + (i + 1) + '</td>',
-            '<td><span class="coupon-code">' + c.code + '</span></td>',
-            '<td><span class="username-cell">' + escapeHtml(username) + '</span></td>',
+            '<td><span class="coupon-code" onclick="copyToClipboard(\'' + c.code + '\')" title="کلیک کنید تا کپی شود">' + c.code + '</span></td>',
+            '<td>' + usernameHtml + '</td>',
             '<td>' + typeLabel + '</td>',
             '<td>' + typeText + '</td>',
             '<td>' + gregorianToJalaliStr(c.expiry_date) + '</td>',
@@ -263,6 +266,34 @@ function renderCoupons(coupons) {
             '</tr>',
         ].join('');
     }).join('');
+}
+
+function copyToClipboard(text) {
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+        navigator.clipboard.writeText(text).then(function () {
+            showToast('کپی شد: ' + text, 'success');
+        }).catch(function () {
+            fallbackCopy(text);
+        });
+    } else {
+        fallbackCopy(text);
+    }
+}
+
+function fallbackCopy(text) {
+    var ta = document.createElement('textarea');
+    ta.value = text;
+    ta.style.position = 'fixed';
+    ta.style.left = '-9999px';
+    document.body.appendChild(ta);
+    ta.select();
+    try {
+        document.execCommand('copy');
+        showToast('کپی شد: ' + text, 'success');
+    } catch (e) {
+        showToast('خطا در کپی کردن', 'error');
+    }
+    document.body.removeChild(ta);
 }
 
 function escapeHtml(str) {
@@ -300,13 +331,9 @@ async function createCoupon(event) {
     const submitBtn = document.getElementById('submit-btn-single');
 
     const username = (formData.get('username') || '').trim();
-    if (!username) {
-        showToast('لطفاً نام کاربری را وارد کنید', 'error');
-        return;
-    }
 
     const data = {
-        prefix: formData.get('prefix') || 'تخفیف',
+        prefix: formData.get('prefix') || '',
         username: username,
         discount_type: formData.get('discount_type'),
         discount_value: formData.get('discount_value'),
@@ -350,7 +377,7 @@ async function createCouponsBulk(event) {
     }
 
     const data = {
-        prefix: formData.get('prefix') || 'تخفیف',
+        prefix: formData.get('prefix') || '',
         usernames: usernames,
         discount_type: formData.get('discount_type'),
         discount_value: formData.get('discount_value'),
@@ -413,8 +440,93 @@ async function deleteCoupon(id) {
     }
 }
 
-// ---- Export / Import ----
+// ---- Backup Panel ----
+function togglePanel() {
+    document.getElementById('backup-panel').classList.toggle('active');
+    document.getElementById('panel-backdrop').classList.toggle('active');
+}
 
+async function exportJSON() {
+    try {
+        const res = await fetch('/api/export/json');
+        const blob = await res.blob();
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = 'coupons-backup.json';
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        URL.revokeObjectURL(url);
+        showToast('خروجی JSON با موفقیت دریافت شد', 'success');
+    } catch (err) {
+        showToast('خطا در خروجی: ' + err.message, 'error');
+    }
+}
+
+async function importJSON(event) {
+    const file = event.target.files[0];
+    if (!file) return;
+    try {
+        const formData = new FormData();
+        formData.append('file', file);
+        const res = await fetch('/api/import/json', { method: 'POST', body: formData });
+        const result = await res.json();
+        if (result.error) {
+            showToast(result.error, 'error');
+        } else {
+            showToast(result.message, 'success');
+            togglePanel();
+            await Promise.all([loadStats(), loadCoupons()]);
+        }
+    } catch (err) {
+        showToast('خطا در ورود: ' + err.message, 'error');
+    }
+    event.target.value = '';
+}
+
+async function downloadDB() {
+    try {
+        const res = await fetch('/api/export/db');
+        const blob = await res.blob();
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = 'coupons-database.db';
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        URL.revokeObjectURL(url);
+        showToast('دیتابیس با موفقیت دریافت شد', 'success');
+    } catch (err) {
+        showToast('خطا در دانلود: ' + err.message, 'error');
+    }
+}
+
+async function uploadDB(event) {
+    const file = event.target.files[0];
+    if (!file) return;
+    if (!confirm('آیا مطمئن هستید؟ این عمل دیتابیس فعلی را کاملاً جایگزین می‌کند.')) {
+        event.target.value = '';
+        return;
+    }
+    try {
+        const formData = new FormData();
+        formData.append('file', file);
+        const res = await fetch('/api/import/db', { method: 'POST', body: formData });
+        const result = await res.json();
+        if (result.error) {
+            showToast(result.error, 'error');
+        } else {
+            showToast(result.message, 'success');
+            togglePanel();
+            await Promise.all([loadStats(), loadCoupons()]);
+        }
+    } catch (err) {
+        showToast('خطا در آپلود: ' + err.message, 'error');
+    }
+    event.target.value = '';
+}
 
 // ---- Shutdown ----
 async function shutdown() {
@@ -430,6 +542,9 @@ document.addEventListener('keydown', function (e) {
     if (e.key === 'Escape') {
         hideModal('single');
         hideModal('bulk');
+        if (document.getElementById('backup-panel').classList.contains('active')) {
+            togglePanel();
+        }
     }
 });
 

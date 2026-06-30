@@ -99,6 +99,103 @@ body {
     color: var(--gray-600);
 }
 
+.header-actions {
+    display: flex;
+    gap: 4px;
+}
+
+/* ─── Backup Panel ─── */
+.panel-backdrop {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: rgba(0, 0, 0, 0.3);
+    z-index: 150;
+    display: none;
+}
+
+.panel-backdrop.active {
+    display: block;
+}
+
+.backup-panel {
+    position: fixed;
+    top: 0;
+    left: -340px;
+    width: 320px;
+    height: 100vh;
+    background: var(--white);
+    box-shadow: var(--shadow-lg);
+    z-index: 200;
+    transition: left 0.3s ease;
+    display: flex;
+    flex-direction: column;
+    overflow-y: auto;
+}
+
+.backup-panel.active {
+    left: 0;
+}
+
+.panel-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 16px 20px;
+    border-bottom: 1px solid var(--gray-200);
+}
+
+.panel-header h3 {
+    font-size: 1rem;
+    font-weight: 700;
+    color: var(--gray-900);
+}
+
+.panel-body {
+    padding: 20px;
+    flex: 1;
+}
+
+.panel-section {
+    margin-bottom: 8px;
+}
+
+.panel-section h4 {
+    font-size: 0.8125rem;
+    font-weight: 600;
+    color: var(--gray-500);
+    margin-bottom: 12px;
+    text-transform: none;
+}
+
+.btn-full {
+    width: 100%;
+    justify-content: flex-start;
+    margin-bottom: 8px;
+    text-align: right;
+}
+
+.btn-full .note {
+    font-size: 0.7rem;
+    color: var(--gray-400);
+    margin-right: 4px;
+}
+
+.panel-divider {
+    height: 1px;
+    background: var(--gray-200);
+    margin: 16px 0;
+}
+
+.panel-hint {
+    font-size: 0.75rem;
+    color: var(--gray-400);
+    margin-top: 8px;
+    line-height: 1.5;
+}
+
 /* ─── Stats ─── */
 .stats {
     display: grid;
@@ -342,6 +439,14 @@ body {
     color: var(--gray-800);
     direction: ltr;
     display: inline-block;
+    cursor: pointer;
+    padding: 2px 4px;
+    border-radius: 4px;
+    transition: background 0.15s ease;
+}
+
+.coupon-code:hover {
+    background: var(--gray-100);
 }
 
 .badge {
@@ -366,6 +471,12 @@ body {
 .badge-expired {
     background: var(--danger-bg);
     color: #991b1b;
+}
+
+.badge-global {
+    background: var(--gray-50);
+    color: var(--gray-500);
+    border: 1px dashed var(--gray-300);
 }
 
 .action-btns {

@@ -1,12 +1,15 @@
 import sys
 import os
+import io
+import shutil
 import sqlite3
+import json
 import random
 import string
 import webbrowser
 import threading
-from datetime import date
-from flask import Flask, render_template, request, jsonify
+from datetime import date, datetime
+from flask import Flask, render_template, request, jsonify, send_file, Response
 
 
 def resource_path(relative_path):
@@ -68,9 +71,12 @@ def init_db():
 
 
 def generate_code(prefix):
-    chars = string.ascii_uppercase + string.digits
-    random_part = ''.join(random.choices(chars, k=6))
-    return f"{prefix}-{random_part}"
+    digits = ''.join(random.choices(string.digits, k=3))
+    letters = ''.join(random.choices(string.ascii_uppercase, k=3))
+    random_part = digits + letters
+    if prefix:
+        return prefix + random_part
+    return random_part
 
 
 def compute_status(row):
@@ -141,12 +147,13 @@ def stats():
 @app.route('/api/coupons')
 def list_coupons():
     auto_expire()
-    username_filter = request.args.get('username', '').strip()
+    q = request.args.get('q', '').strip()
     conn = get_db()
-    if username_filter:
+    if q:
+        like = '%' + q + '%'
         rows = conn.execute(
-            "SELECT * FROM coupons WHERE username LIKE ? ORDER BY created_at DESC",
-            ('%' + username_filter + '%',)
+            "SELECT * FROM coupons WHERE code LIKE ? OR username LIKE ? ORDER BY created_at DESC",
+            (like, like)
         ).fetchall()
     else:
         rows = conn.execute(
@@ -159,7 +166,7 @@ def list_coupons():
 @app.route('/api/coupons', methods=['POST'])
 def create_coupon():
     data = request.get_json()
-    prefix = (data.get('prefix') or 'تخفیف').strip()
+    prefix = (data.get('prefix') or '').strip()
     username = (data.get('username') or '').strip()
     discount_type = data.get('discount_type')
     discount_value = data.get('discount_value')
@@ -178,9 +185,6 @@ def create_coupon():
         return jsonify({'error': 'تعداد باید عدد باشد'}), 400
     if quantity < 1:
         return jsonify({'error': 'تعداد باید حداقل ۱ باشد'}), 400
-    if not prefix:
-        prefix = 'تخفیف'
-
     code = generate_code(prefix)
     conn = get_db()
     try:
@@ -204,7 +208,7 @@ def create_coupons_bulk():
     if not usernames or not isinstance(usernames, list):
         return jsonify({'error': 'لیست نام کاربری ارسال نشده'}), 400
 
-    prefix = (data.get('prefix') or 'تخفیف').strip()
+    prefix = (data.get('prefix') or '').strip()
     discount_type = data.get('discount_type')
     discount_value = data.get('discount_value')
     expiry_date = data.get('expiry_date')
@@ -222,8 +226,6 @@ def create_coupons_bulk():
         return jsonify({'error': 'تعداد باید عدد باشد'}), 400
     if quantity < 1:
         return jsonify({'error': 'تعداد باید حداقل ۱ باشد'}), 400
-    if not prefix:
-        prefix = 'تخفیف'
 
     conn = get_db()
     created = []
@@ -301,6 +303,111 @@ def delete_coupon(coupon_id):
         return jsonify({'error': 'کوپن یافت نشد'}), 404
     conn.close()
     return jsonify({'message': 'کوپن با موفقیت حذف شد'})
+
+
+@app.route('/api/export/json')
+def export_json():
+    conn = get_db()
+    rows = conn.execute("SELECT * FROM coupons ORDER BY id").fetchall()
+    conn.close()
+    data = [{
+        'code': r['code'],
+        'username': r['username'],
+        'discount_type': r['discount_type'],
+        'discount_value': r['discount_value'],
+        'expiry_date': r['expiry_date'],
+        'quantity': r['quantity'],
+        'used_count': r['used_count'],
+        'status': r['status'],
+        'created_at': r['created_at'],
+    } for r in rows]
+    return Response(
+        json.dumps(data, ensure_ascii=False, indent=2),
+        mimetype='application/json; charset=utf-8',
+        headers={'Content-Disposition': 'attachment; filename=coupons-backup.json'}
+    )
+
+
+@app.route('/api/import/json', methods=['POST'])
+def import_json():
+    file = request.files.get('file')
+    if not file:
+        return jsonify({'error': 'فایلی ارسال نشده'}), 400
+    try:
+        data = json.loads(file.read().decode('utf-8'))
+    except Exception:
+        return jsonify({'error': 'فرمت JSON نامعتبر است'}), 400
+    if not isinstance(data, list):
+        return jsonify({'error': 'فرمت فایل نامعتبر است (آرایه مورد نیاز)'}), 400
+
+    _auto_backup_db()
+    conn = get_db()
+    imported = 0
+    for item in data:
+        code = item.get('code', '').strip()
+        if not code:
+            continue
+        username = (item.get('username') or '').strip()
+        discount_type = item.get('discount_type')
+        discount_value = item.get('discount_value')
+        expiry_date = item.get('expiry_date')
+        quantity = int(item.get('quantity', 1))
+        used_count = int(item.get('used_count', 0))
+        status = item.get('status', 'active')
+        created_at = item.get('created_at')
+        err = validate_discount(discount_type, discount_value)
+        if err or not expiry_date:
+            continue
+        try:
+            conn.execute(
+                "INSERT INTO coupons (code, username, discount_type, discount_value, expiry_date, quantity, used_count, status, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, COALESCE(?, datetime('now','localtime')))",
+                (code, username, discount_type, float(discount_value), expiry_date, quantity, used_count, status, created_at)
+            )
+            conn.commit()
+            imported += 1
+        except sqlite3.IntegrityError:
+            pass
+    conn.close()
+    return jsonify({'imported': imported, 'message': f'{imported} کد تخفیف وارد شد'})
+
+
+@app.route('/api/export/db')
+def export_db():
+    db_path = get_db_path()
+    return send_file(
+        db_path,
+        mimetype='application/octet-stream',
+        as_attachment=True,
+        download_name='coupons-database.db'
+    )
+
+
+@app.route('/api/import/db', methods=['POST'])
+def import_db():
+    file = request.files.get('file')
+    if not file:
+        return jsonify({'error': 'فایلی ارسال نشده'}), 400
+
+    backup_path = _auto_backup_db()
+    db_path = get_db_path()
+    try:
+        file.save(db_path)
+        init_db()
+        return jsonify({'message': 'دیتابیس با موفقیت جایگزین شد', 'backup': backup_path})
+    except Exception as e:
+        return jsonify({'error': f'خطا در جایگزینی دیتابیس: {str(e)}'}), 500
+
+
+def _auto_backup_db():
+    db_path = get_db_path()
+    if not os.path.exists(db_path):
+        return None
+    backup_dir = os.path.join(os.path.dirname(db_path), 'backups')
+    os.makedirs(backup_dir, exist_ok=True)
+    timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
+    backup_path = os.path.join(backup_dir, f'coupons_{timestamp}.db')
+    shutil.copy2(db_path, backup_path)
+    return backup_path
 
 
 @app.route('/api/shutdown', methods=['POST'])

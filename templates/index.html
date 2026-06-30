@@ -12,7 +12,10 @@
     <header class="header">
         <div class="header-inner">
             <h1 class="header-title">مدیریت کدهای تخفیف</h1>
-            <button class="btn-icon" onclick="shutdown()" title="بستن برنامه">&times;</button>
+            <div class="header-actions">
+                <button class="btn-icon" onclick="togglePanel()" title="مدیریت پشتیبان‌گیری">&#9881;</button>
+                <button class="btn-icon" onclick="shutdown()" title="بستن برنامه">&times;</button>
+            </div>
         </div>
     </header>
 
@@ -43,7 +46,7 @@
         </section>
 
         <section class="filter-bar">
-            <input type="text" id="username-filter" class="filter-input" placeholder="جستجوي نام كاربري ..." oninput="filterByUsername()">
+            <input type="text" id="search-filter" class="filter-input" placeholder="جستجوي كد تخفيف يا نام كاربري ..." oninput="filterBySearch()">
             <button class="btn btn-sm btn-outline" onclick="clearFilter()">پاك كردن</button>
             <span class="filter-info" id="filter-info"></span>
         </section>
@@ -88,21 +91,21 @@
         <form id="form-single" onsubmit="createCoupon(event)">
             <div class="form-group">
                 <label for="s-prefix">پيش‌فرض كد</label>
-                <input type="text" id="s-prefix" name="prefix" value="تخفيف">
+                <input type="text" id="s-prefix" name="prefix" placeholder="اختیاری">
             </div>
             <div class="form-group">
                 <label for="s-username">نام كاربري</label>
-                <input type="text" id="s-username" name="username" required placeholder="مثال: ali123">
+                <input type="text" id="s-username" name="username" placeholder="مثال: ali123 (خالی = عمومی)">
             </div>
             <div class="form-group">
                 <label>نوع تخفيف</label>
                 <div class="radio-group">
                     <label class="radio-label">
-                        <input type="radio" name="discount_type" value="percentage" checked>
+                        <input type="radio" name="discount_type" value="percentage">
                         <span>درصدي</span>
                     </label>
                     <label class="radio-label">
-                        <input type="radio" name="discount_type" value="fixed">
+                        <input type="radio" name="discount_type" value="fixed" checked>
                         <span>مبلغ ثابت</span>
                     </label>
                 </div>
@@ -141,7 +144,7 @@
         <form id="form-bulk" onsubmit="createCouponsBulk(event)">
             <div class="form-group">
                 <label for="b-prefix">پيش‌فرض كد</label>
-                <input type="text" id="b-prefix" name="prefix" value="تخفيف">
+                <input type="text" id="b-prefix" name="prefix" placeholder="اختیاری">
             </div>
             <div class="form-group">
                 <label for="b-usernames">نام كاربري‌ها (هر خط يك نام)</label>
@@ -151,11 +154,11 @@
                 <label>نوع تخفيف</label>
                 <div class="radio-group">
                     <label class="radio-label">
-                        <input type="radio" name="discount_type" value="percentage" checked>
+                        <input type="radio" name="discount_type" value="percentage">
                         <span>درصدي</span>
                     </label>
                     <label class="radio-label">
-                        <input type="radio" name="discount_type" value="fixed">
+                        <input type="radio" name="discount_type" value="fixed" checked>
                         <span>مبلغ ثابت</span>
                     </label>
                 </div>
@@ -183,6 +186,32 @@
         </form>
     </div>
 </div>
+
+<div class="panel-backdrop" id="panel-backdrop" onclick="togglePanel()"></div>
+
+<div class="backup-panel" id="backup-panel">
+    <div class="panel-header">
+        <h3>مدیریت پشتیبان‌گیری</h3>
+        <button class="btn-icon" onclick="togglePanel()">&times;</button>
+    </div>
+    <div class="panel-body">
+        <div class="panel-section">
+            <h4>خروجی (Export)</h4>
+            <button class="btn btn-outline btn-full" onclick="exportJSON()">خروجی JSON</button>
+            <button class="btn btn-outline btn-full" onclick="downloadDB()">دانلود دیتابیس</button>
+        </div>
+        <div class="panel-divider"></div>
+        <div class="panel-section">
+            <h4>ورودی (Import)</h4>
+            <button class="btn btn-outline btn-full" onclick="document.getElementById('import-json-input').click()">ورودی JSON</button>
+            <button class="btn btn-outline btn-full" onclick="document.getElementById('import-db-input').click()">آپلود دیتابیس <span class="note">(جایگزین کامل)</span></button>
+            <p class="panel-hint">قبل از ورود، نسخه پشتیبان خودکار ساخته می‌شود</p>
+        </div>
+    </div>
+</div>
+
+<input type="file" id="import-json-input" accept=".json" style="display:none" onchange="importJSON(event)">
+<input type="file" id="import-db-input" accept=".db" style="display:none" onchange="uploadDB(event)">
 
 <div class="toast-container" id="toast-container"></div>
 
